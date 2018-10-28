@@ -98,9 +98,9 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
             tempMemObj = list_entry(p2,struct memObj,list);
 	    if(tempMemObj!=NULL && tempMemObj->oid==vma->vm_pgoff)
 	    {
-		if(remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot))
+		if((remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot))<0)
 	        {
-        	    return -EAGAIN;
+        	    return -EIO;
         	}
 	        return 0;
 	    }
@@ -121,9 +121,9 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned long pfn = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
         tempMemObj->addr = pfn;
 	tempMemObj->oSize = size;
-        if(remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot))
+        if((remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot))<0)
 	{
-	    return -EAGAIN;
+	    return -EIO;
 	}
 	list_for_each_safe(pp1,pq1,&containerHead.list)
         {
