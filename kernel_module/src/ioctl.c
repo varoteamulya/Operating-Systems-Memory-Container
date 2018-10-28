@@ -309,7 +309,7 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
     struct list_head *fp,*fq;
     mutex_lock(&lock);
     tempCont = searchContainerByProcId(current->pid);
-    if(tempCont = NULL)
+    if(tempCont == NULL)
     {
         printk("No container found for this process id:%uld \n", current->pid);
 	return 0;
