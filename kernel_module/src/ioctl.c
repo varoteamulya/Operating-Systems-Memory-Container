@@ -51,6 +51,7 @@ struct container_list *isConatinerPresent(__u64 id);
 void CreateContainerWithCid(__u64 kcid,pid_t proId);
 struct task_list *isProcessPresent(struct container_list *container, pid_t procId);
 int associateProcToContainer(struct container_list *container, pid_t procId);
+struct container_list *searchContainerByProcId(pid_t procsId);
 
 extern struct container_list containerHead;
 static DEFINE_MUTEX(lock);
@@ -160,7 +161,52 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
 
 int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 {
+    printk("Delete the process from the container list\n");
+    struct container_list *deleteProcInCont = NULL;
+    struct task_list *deAssociateProc = NULL;
+    struct list_head *dp,*dq;
+    mutex_lock(&lock);
+    deleteProcInCont = searchContainerByProcId(current->pid);
+    if(deleteProcInCont == NULL)
+    {
+	printk("Container with proc id: %uld not present\n", current->pid);
+	return 0;
+    }
+    else
+    {
+	list_for_each_safe(dp,dq,&((deleteProcInCont->head).list))
+	{
+	    deAssociateProc = list_entry(dp,struct task_list,list);
+	    if(deAssociateProc!=NULL && deAssociateProc->processId == current->pid) 
+            {
+		list_del(&deAssociateProc->list);
+		kfree(deAssociateProc);
+  	    }
+	}
+    }
+    mutex_unlock(&lock);
     return 0;
+}
+
+struct container_list *searchContainerByProcId(pid_t procsId)
+{
+    printk("Search Container by Process id:uld \n", procsId);
+    struct list_head *sp,*sq, *sp1,*sq1;
+    struct task_list *tempProc;
+    struct container_list *tCont;
+    list_for_each_safe(sp,sq,&containerHead.list)
+    {
+        tCont = list_entry(sp, struct container_list,list);
+        list_for_each_safe(sp1, sq1, &((tCont->head).list))
+        {
+            tempProc = list_entry(sp1,struct task_list,list);
+	    if(tempProc!=NULL && tempProc->processId == procsId)
+	    {
+                return tCont; 
+	    }
+        }
+    }
+    return NULL;
 }
 
 struct container_list *isConatinerPresent(__u64 id)
@@ -168,7 +214,6 @@ struct container_list *isConatinerPresent(__u64 id)
    printk("Check iscontainerpresent\n ");
    struct container_list *temp;
    struct list_head *pos,*p;
-
    //Traversing the list
    list_for_each_safe(pos,p,&containerHead.list)
     {
@@ -178,7 +223,6 @@ struct container_list *isConatinerPresent(__u64 id)
          return temp;
         }
     }
-
     return NULL;
 }
 
@@ -206,8 +250,7 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
 
 struct task_list *isProcessPresent(struct container_list *container, pid_t procId)
 {
-    printk("Checking is ProcessPresent\n");
-
+   printk("Checking is ProcessPresent\n");
    struct task_list *tThreadTemp;
    struct list_head *p,*q;
    list_for_each_safe(p, q,&((container->head).list))
@@ -231,7 +274,6 @@ int associateProcToContainer(struct container_list *container, pid_t procId)
      tTmp->processId = procId;
      list_add(&(tTmp->list), &((container->head).list));
      mutex_unlock(&lock);
-
      return 0;
 }
 
@@ -253,8 +295,6 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
        printk("Creating and allocating the processor with id: %uld to list\n",processIdOfTask);
        associateProcToContainer(intermediateContainer,processIdOfTask);
    }
-
-
     return 0;
 }
 
