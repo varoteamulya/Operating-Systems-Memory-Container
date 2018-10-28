@@ -47,7 +47,6 @@
 
 phys_addr_t virt_to_phys(volatile void * address);
 int remap_pfn_range(struct vm_area_struct *vma,unsigned long addr,unsigned long pfn,unsigned long size,pgprot_t prot);
-void *address=NULL;
 struct container_list *isConatinerPresent(__u64 id);
 void CreateContainerWithCid(__u64 kcid);
 struct task_list *isProcessPresent(struct container_list *container, pid_t procId);
@@ -55,6 +54,7 @@ int associateProcToContainer(struct container_list *container);
 
 extern struct container_list containerHead;
 static DEFINE_MUTEX(lock);
+void *address=NULL;
 
 struct task_list
 {
@@ -74,35 +74,61 @@ struct container_list
 {
    __u64 cid;
    struct task_list head;
-   struct memObj head;
+   struct memObj mHead;
    struct list_head list;
    struct list_head objList;
 };
+struct memObj *tempMemObj;
+struct list_head *pos;
+struct list_head *p,*q,*p2,*q2;
+struct container_list *tempCont; 
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     printk("Entered memory_container_mmap\n");
-    __u64 size = vma->vm_end - vma->vm_start;
-    int ret = 0;
+    __u64 size = (__u64)vma->vm_end - vma->vm_start;
+    list_for_each_safe(p,q,&containerHead.list)
+    {
+	tempCont = list_entry(p, struct container_list,list);
+        list_for_each_safe(p2, q2, &((tempCont->mHead).list))
+        {
+            tempMemObj = list_entry(p2,struct memObj,list);
+	    if(tempMemObj!=NULL && tempMemObj->oid==vma->vm_pgoff)
+	    {
+		if(remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot))
+	        {
+        	    return -EAGAIN;
+        	}
+	        return 0;
+	    }
+        }
+
+    }
+    address = kmalloc((size), GFP_KERNEL);
 
     if (address == NULL)
     {
-    	address = kcalloc(1, size, GFP_KERNEL);
-    	printk("address=%d\t", address);
-    	printk("size=%lu\t", size);
-    	printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
+	printk("kmalloc allocation is null\n");
+        return -1;
     }
+    else
+    {
+    	tempMemObj = (struct memObj *)kmalloc(sizeof(struct memObj),GFP_KERNEL);
+        tempMemObj->oid = vma->vm_pgoff;
+        unsigned long pfn = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
+        tempMemObj->addr = pfn;
+	tempMemObj->oSize = size;
+        if(remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot))
+	{
+	    return -EAGAIN;
+	}
+        list_add(&(tmp->list),&(memObj));
 
-    unsigned long pfn = virt_to_phys((void *)address)>>PAGE_SHIFT;
-    ret = remap_pfn_range(vma, vma->vm_start, pfn,
-    			    vma->vm_end - vma->vm_start,
-    			    vma->vm_page_prot);
-    if (ret < 0)
-   {
-	printk("remap failed\n");
-        return -EAGAIN;
     }
-     return 0;
+    printk("address=%d\t", address);
+    printk("size=%lu\t", size);
+    printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
+    return 0;
 }
 
 
@@ -151,6 +177,7 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
      tmp = (struct container_list *)kmalloc(sizeof(struct container_list), GFP_KERNEL);
      tmp->cid = kcid;
      INIT_LIST_HEAD(&tmp->head.list);
+     INIT_LIST_HEAD(&tmp->mHead.list);
      //Adding the container to the list
      mutex_lock(&lock);
      list_add(&(tmp->list),&(containerHead.list));
