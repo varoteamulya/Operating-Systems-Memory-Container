@@ -45,10 +45,63 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 
+phys_addr_t virt_to_phys(volatile void * address);
+int remap_pfn_range(struct vm_area_struct *vma,unsigned long addr,unsigned long pfn,unsigned long size,pgprot_t prot);
+void *address=NULL;
+struct container_list *isConatinerPresent(__u64 id)
+
+
+extern struct container_list containerHead;
+static DEFINE_MUTEX(lock);
+
+struct task_list
+{
+  pid_t processId;
+  struct list_head list;
+};
+
+struct memObj
+{
+  __u64 oid;
+  __u64 addr;
+  __u64 oSize;
+  struct list_head list;
+}
+
+struct container_list
+{
+   __u64 cid;
+   __u64 objId;
+   struct task_list head;
+   struct memObj head;
+   struct list_head list;
+   struct list_head objList;
+};
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-    return 0;
+    printk("Entered memory_container_mmap\n");
+    __u64 size = vma->vm_end - vma->vm_start;
+    int ret = 0;
+
+    if (address == NULL)
+    {
+    	address = kcalloc(1, size, GFP_KERNEL);
+    	printk("address=%d\t", address);
+    	printk("size=%lu\t", size);
+    	printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
+    }
+
+    unsigned long pfn = virt_to_phys((void *)address)>>PAGE_SHIFT;
+    ret = remap_pfn_range(vma, vma->vm_start, pfn,
+    			    vma->vm_end - vma->vm_start,
+    			    vma->vm_page_prot);
+    if (ret < 0)
+   {
+	printk("remap failed\n");
+        return -EAGAIN;
+    }
+     return 0;
 }
 
 
@@ -69,9 +122,65 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
     return 0;
 }
 
+struct container_list *isConatinerPresent(__u64 id)
+{
+   printk("Check iscontainerpresent\n ");
+   struct container_list *temp;
+   struct list_head *pos,*p;
+
+   //Traversing the list
+   list_for_each_safe(pos,p,&containerHead.list)
+    {
+      temp = list_entry(pos, struct container_list, list);
+      if(temp!=NULL && temp->cid == id)
+        {
+         return temp;
+        }
+    }
+
+    return NULL;
+}
+
+
+void CreateContainerWithCid(__u64 kcid, __u64 obId)
+{
+     printk("creating the container ");
+     struct container_list *tmp;
+     //Creating a new container
+     tmp = (struct container_list *)kmalloc(sizeof(struct container_list), GFP_KERNEL);
+     tmp->cid = kcid;
+     INIT_LIST_HEAD(&tmp->head.list);
+     //Adding the container to the list
+     mutex_lock(&lock);
+     list_add(&(tmp->list),&(containerHead.list));
+     mutex_unlock(&lock);
+     struct thread_list *intermediateThread;
+     intermediateThread = isThreadPresent(tmp, current->pid);
+     if(intermediateThread == NULL)
+     {
+         addThread(tmp, isFirstThread);
+     }
+}
 
 int memory_container_create(struct memory_container_cmd __user *user_cmd)
 {
+    printk("Entered create container\n");
+    struct memory_container_cmd kcmd;
+    struct container_list *intermediateContainer;
+    copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
+    intermediateContainer = isContainerPresent(kcmd.cid);
+    if(intermediateContainer==NULL)
+    {
+        printk("Container doesn't exist, creating one now with cid: %llu \n",kcmd.cid);
+    	CreateContainerWithCid(kcmd.cid,kcmd.oid);
+    }
+   else
+   {
+       printk("Creating and allocating the processor with id: %ld to list\n",current->pid);
+       addProcessToContainer(kcmd.cid,current->pid);
+   }
+
+
     return 0;
 }
 

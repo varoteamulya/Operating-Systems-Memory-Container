@@ -45,6 +45,31 @@
 #include <linux/sched.h>
 
 extern struct miscdevice memory_container_dev;
+struct container_list containerHead;
+
+struct task_list
+{
+  pid_t processId;
+  struct list_head list;
+};
+
+struct memObj
+{
+  __u64 oid;
+  __u64 addr;
+  __u64 oSize;
+  struct list_head list;
+}
+
+struct container_list
+{
+   __u64 cid;
+   __u64 objId;
+   struct task_list head;
+   struct memObj head;
+   struct list_head list;
+   struct list_head objList;
+};
 
 
 int memory_container_init(void)
@@ -59,6 +84,7 @@ int memory_container_init(void)
 
     printk(KERN_ERR "\"memory_container\" misc device installed\n");
     printk(KERN_ERR "\"memory_container\" version 0.1\n");
+    INIT_LIST_HEAD(&containerHead.list);
     return ret;
 }
 
