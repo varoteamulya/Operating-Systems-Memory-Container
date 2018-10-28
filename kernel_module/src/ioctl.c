@@ -48,9 +48,9 @@
 phys_addr_t virt_to_phys(volatile void * address);
 int remap_pfn_range(struct vm_area_struct *vma,unsigned long addr,unsigned long pfn,unsigned long size,pgprot_t prot);
 struct container_list *isConatinerPresent(__u64 id);
-void CreateContainerWithCid(__u64 kcid);
+void CreateContainerWithCid(__u64 kcid,pid_t proId);
 struct task_list *isProcessPresent(struct container_list *container, pid_t procId);
-int associateProcToContainer(struct container_list *container);
+int associateProcToContainer(struct container_list *container, pid_t procId);
 
 extern struct container_list containerHead;
 static DEFINE_MUTEX(lock);
@@ -68,7 +68,7 @@ struct memObj
   __u64 addr;
   __u64 oSize;
   struct list_head list;
-}
+};
 
 struct container_list
 {
@@ -78,9 +78,11 @@ struct container_list
    struct list_head list;
    struct list_head objList;
 };
+
 struct memObj *tempMemObj;
+struct task_list *tempProcObj;
 struct list_head *pos;
-struct list_head *p,*q,*p2,*q2;
+struct list_head *p,*q,*p2,*q2,*pp1,*pq1,*pp2,*pq2;
 struct container_list *tempCont; 
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
@@ -122,11 +124,23 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 	{
 	    return -EAGAIN;
 	}
-        list_add(&(tmp->list),&(memObj));
-
+	list_for_each_safe(pp1,pq1,&containerHead.list)
+        {
+ 	    tempCont = list_entry(pp1, struct container_list,list);
+            list_for_each_safe(pp2, pq2, &((tempCont->head).list))
+            {
+                tempProcObj = list_entry(pp2,struct task_list,list);
+	        if(tempProcObj!=NULL && tempProcObj->processId == current->pid)
+	        {
+                    mutex_lock(&lock);
+                    list_add(&(tempMemObj->list),&((tempCont->mHead).list));
+                    mutex_unlock(&lock);
+	        }
+            }
+         }
     }
-    printk("address=%d\t", address);
-    printk("size=%lu\t", size);
+    printk("address=%d\t",address);
+    printk("size=%llu\t", size);
     printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
     return 0;
 }
@@ -184,9 +198,9 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
      mutex_unlock(&lock);
      struct task_list *intermediateProc;
      intermediateProc = isProcessPresent(tmp, proId);
-     if(intermediateThread == NULL)
+     if(intermediateProc == NULL)
      {
-         associateProcToContainer(tmp);
+         associateProcToContainer(tmp,proId);
      }
 }
 
@@ -210,7 +224,7 @@ struct task_list *isProcessPresent(struct container_list *container, pid_t procI
 
 int associateProcToContainer(struct container_list *container, pid_t procId)
 {
-     printk("associate process to conatiner %llu with pid as %ld ", container->cid, procId);
+     printk("associate process to conatiner %llu with pid as %uld ", container->cid, procId);
      struct task_list *tTmp;
      tTmp = (struct task_list *)kmalloc(sizeof(struct task_list), GFP_KERNEL);
      mutex_lock(&lock);
@@ -227,7 +241,7 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     struct memory_container_cmd kcmd;
     struct container_list *intermediateContainer;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
-    intermediateContainer = isContainerPresent(kcmd.cid);
+    intermediateContainer = isConatinerPresent(kcmd.cid);
     pid_t processIdOfTask = current->pid;
     if(intermediateContainer==NULL)
     {
@@ -236,8 +250,8 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     }
    else
    {
-       printk("Creating and allocating the processor with id: %ld to list\n",processIdOfTask);
-       associateProcToContainer(kcmd.cid,processIdOfTask);
+       printk("Creating and allocating the processor with id: %uld to list\n",processIdOfTask);
+       associateProcToContainer(intermediateContainer,processIdOfTask);
    }
 
 

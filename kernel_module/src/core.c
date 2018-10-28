@@ -59,14 +59,13 @@ struct memObj
   __u64 addr;
   __u64 oSize;
   struct list_head list;
-}
+};
 
 struct container_list
 {
    __u64 cid;
-   __u64 objId;
    struct task_list head;
-   struct memObj head;
+   struct memObj mHead;
    struct list_head list;
    struct list_head objList;
 };
