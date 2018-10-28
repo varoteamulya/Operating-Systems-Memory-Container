@@ -301,6 +301,30 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
 
 int memory_container_free(struct memory_container_cmd __user *user_cmd)
 {
+    printk("Memory Container Free\n");
+    struct memory_container_cmd kcmd;
+    copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
+    struct container_list *tempCont = NULL;
+    struct memObj *freeMemObj = NULL;
+    struct list_head *fp,*fq;
+    mutex_lock(&lock);
+    tempCont = searchContainerByProcId(current->pid);
+    if(tempCont = NULL)
+    {
+        printk("No container found for this process id:%uld \n", current->pid);
+	return 0;
+    }
+    list_for_each_safe(fp,fq,&((tempCont->head).list))
+    {
+        freeMemObj = list_entry(fp,struct memObj,list);
+        if(freeMemObj!=NULL && freeMemObj->oid == kcmd.oid)
+        {
+            freeMemObj->addr = NULL;
+            list_del(&freeMemObj->list);
+	    kfree(freeMemObj);
+  	}
+    }
+    mutex_unlock(&lock);
     return 0;
 }
 
