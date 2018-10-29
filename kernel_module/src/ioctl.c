@@ -145,9 +145,9 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
             }
          }
     }
-    printk("address=%d\t",address);
-    printk("size=%llu\t", size);
-    printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
+//    printk("address=%d\t",address);
+//    printk("size=%llu\t", size);
+//    printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
     return 0;
 }
 
@@ -156,8 +156,11 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 {
 //    printk("Accessing the container lock");
     struct container_list *tempC = NULL;
-    struct task_list *tempT = NULL;
+    struct memObj *tempT = NULL;
     struct list_head *p,*q;
+    struct memory_container_cmd kcmd;
+    copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
+
     tempC = searchContainerByProcId(current->pid);
     if(tempC == NULL)
     {
@@ -168,10 +171,10 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
     {
         list_for_each_safe(p,q,&((tempC->head).list))
 	{
-	    tempT = list_entry(p,struct task_list,list);
-	    if(tempT!=NULL && tempT->processId == current->pid)
+	    tempT = list_entry(p,struct memObj,list);
+	    if(tempT!=NULL && tempT->oid == kcmd.oid)
             {
-		mutex_lock(&tempC->contLock);
+		mutex_lock(tempC->contLock);
   	    }
 	}
     }
@@ -184,8 +187,10 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
 {
   //  printk("Accessing the container unLock");
     struct container_list *tempCu = NULL;
-    struct task_list *tempTu = NULL;
+    struct memObj *tempTu = NULL;
     struct list_head *pu,*qu;
+    struct memory_container_cmd kcmd;
+    copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
     tempCu = searchContainerByProcId(current->pid);
     if(tempCu == NULL)
     {
@@ -196,10 +201,10 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
     {
         list_for_each_safe(pu,qu,&((tempCu->head).list))
         {
-            tempTu = list_entry(pu,struct task_list,list);
-            if(tempTu!=NULL && tempTu->processId == current->pid)
+            tempTu = list_entry(pu,struct memObj,list);
+            if(tempTu!=NULL && tempTu->oid == kcmd.oid)
             {
-                mutex_unlock(&tempCu->contLock);
+                mutex_unlock(tempCu->contLock);
             }
         }
     }
@@ -238,7 +243,7 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 
 struct container_list *searchContainerByProcId(pid_t procsId)
 {
-    printk("Search Container by Process id:%d \n", procsId);
+//    printk("Search Container by Process id:%d \n", procsId);
     struct list_head *sp,*sq, *sp1,*sq1;
     struct task_list *tempProc;
     struct container_list *tCont;
