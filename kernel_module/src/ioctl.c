@@ -77,14 +77,14 @@ struct container_list
    struct task_list head;
    struct memObj mHead;
    struct list_head list;
-   struct list_head objList;
+   pthread_mutex_t contLock;
 };
 
 struct memObj *tempMemObj;
 struct task_list *tempProcObj;
 struct list_head *pos;
 struct list_head *p,*q,*p2,*q2,*pp1,*pq1,*pp2,*pq2;
-struct container_list *tempCont; 
+struct container_list *tempCont;
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -149,12 +149,55 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 
 int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 {
+    printk("Accessing the container lock");
+    struct container_list *tempC = NULL;
+    struct task_list *tempT = NULL;
+    struct list_head *p,*q;
+    tempC = searchContainerByProcId(current->pid);
+    if(tempC == NULL)
+    {
+        printk("No container is associated with this process\n");
+        return 0;
+    }
+    else
+    {
+        list_for_each_safe(p,q,&((tempC->head).list))
+	{
+	    tempT = list_entry(p,struct task_list,list);
+	    if(tempT!=NULL && tempT->processId == current->pid)
+            {
+		pthread_mutex_lock(&tempC->contLock);
+  	    }
+	}
+    }
+
     return 0;
 }
 
 
 int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
 {
+    printk("Accessing the container unLock");
+    struct container_list *tempCu = NULL;
+    struct task_list *tempTu = NULL;
+    struct list_head *pu,*qu;
+    tempCu = searchContainerByProcId(current->pid);
+    if(tempCu == NULL)
+    {
+        printk("No container is associated with this process\n");
+        return 0;
+    }
+    else
+    {
+        list_for_each_safe(pu,qu,&((tempCu->head).list))
+        {
+            tempTu = list_entry(pu,struct task_list,list);
+            if(tempTu!=NULL && tempTu->processId == current->pid)
+            {
+                pthread_mutex_unlock(&tempCu->contLock);
+            }
+        }
+    }
     return 0;
 }
 
@@ -236,6 +279,7 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
      tmp->cid = kcid;
      INIT_LIST_HEAD(&tmp->head.list);
      INIT_LIST_HEAD(&tmp->mHead.list);
+     tmp->contLock = PTHREAD_MUTEX_INITIALIZER;
      //Adding the container to the list
      mutex_lock(&lock);
      list_add(&(tmp->list),&(containerHead.list));
