@@ -77,7 +77,7 @@ struct container_list
    struct task_list head;
    struct memObj mHead;
    struct list_head list;
-   pthread_mutex_t contLock;
+   struct mutex *contLock;
 };
 
 struct memObj *tempMemObj;
@@ -88,8 +88,9 @@ struct container_list *tempCont;
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-    printk("Entered memory_container_mmap\n");
+    //printk("Entered memory_container_mmap\n");
     __u64 size = (__u64)vma->vm_end - vma->vm_start;
+    int ret =0;
     list_for_each_safe(p,q,&containerHead.list)
     {
 	tempCont = list_entry(p, struct container_list,list);
@@ -98,8 +99,10 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
             tempMemObj = list_entry(p2,struct memObj,list);
 	    if(tempMemObj!=NULL && tempMemObj->oid==vma->vm_pgoff)
 	    {
-		if((remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot))<0)
+                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot);
+		if(ret<0)
 	        {
+		    printk("Memory mapping failed\n");
         	    return -EIO;
         	}
 	        return 0;
@@ -121,8 +124,10 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned long pfn = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
         tempMemObj->addr = pfn;
 	tempMemObj->oSize = size;
-        if((remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot))<0)
+        ret = remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot);
+        if(ret<0)
 	{
+ 	    printk("Error in address mapping\n");
 	    return -EIO;
 	}
 	list_for_each_safe(pp1,pq1,&containerHead.list)
@@ -149,7 +154,7 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 
 int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 {
-    printk("Accessing the container lock");
+//    printk("Accessing the container lock");
     struct container_list *tempC = NULL;
     struct task_list *tempT = NULL;
     struct list_head *p,*q;
@@ -166,7 +171,7 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 	    tempT = list_entry(p,struct task_list,list);
 	    if(tempT!=NULL && tempT->processId == current->pid)
             {
-		pthread_mutex_lock(&tempC->contLock);
+		mutex_lock(&tempC->contLock);
   	    }
 	}
     }
@@ -177,7 +182,7 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 
 int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
 {
-    printk("Accessing the container unLock");
+  //  printk("Accessing the container unLock");
     struct container_list *tempCu = NULL;
     struct task_list *tempTu = NULL;
     struct list_head *pu,*qu;
@@ -194,7 +199,7 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
             tempTu = list_entry(pu,struct task_list,list);
             if(tempTu!=NULL && tempTu->processId == current->pid)
             {
-                pthread_mutex_unlock(&tempCu->contLock);
+                mutex_unlock(&tempCu->contLock);
             }
         }
     }
@@ -212,7 +217,7 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
     deleteProcInCont = searchContainerByProcId(current->pid);
     if(deleteProcInCont == NULL)
     {
-	printk("Container with proc id: %uld not present\n", current->pid);
+	printk("Container with proc id: %u not present\n", current->pid);
 	return 0;
     }
     else
@@ -233,7 +238,7 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 
 struct container_list *searchContainerByProcId(pid_t procsId)
 {
-    printk("Search Container by Process id:uld \n", procsId);
+    printk("Search Container by Process id:%d \n", procsId);
     struct list_head *sp,*sq, *sp1,*sq1;
     struct task_list *tempProc;
     struct container_list *tCont;
@@ -245,7 +250,7 @@ struct container_list *searchContainerByProcId(pid_t procsId)
             tempProc = list_entry(sp1,struct task_list,list);
 	    if(tempProc!=NULL && tempProc->processId == procsId)
 	    {
-                return tCont; 
+                return tCont;
 	    }
         }
     }
@@ -279,7 +284,8 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
      tmp->cid = kcid;
      INIT_LIST_HEAD(&tmp->head.list);
      INIT_LIST_HEAD(&tmp->mHead.list);
-     tmp->contLock = PTHREAD_MUTEX_INITIALIZER;
+     tmp->contLock = (struct mutex*)kcalloc(1, sizeof(struct mutex),GFP_KERNEL);
+     mutex_init(tmp->contLock);
      //Adding the container to the list
      mutex_lock(&lock);
      list_add(&(tmp->list),&(containerHead.list));
@@ -302,7 +308,7 @@ struct task_list *isProcessPresent(struct container_list *container, pid_t procI
       tThreadTemp = list_entry(p, struct task_list, list);
       if(tThreadTemp!=NULL && tThreadTemp->processId == procId)
       {
-        printk("task pid matched: %uld\n", procId);
+        printk("task pid matched: %u\n", procId);
         return tThreadTemp;
       }
    }
@@ -311,7 +317,7 @@ struct task_list *isProcessPresent(struct container_list *container, pid_t procI
 
 int associateProcToContainer(struct container_list *container, pid_t procId)
 {
-     printk("associate process to conatiner %llu with pid as %uld ", container->cid, procId);
+     printk("associate process to conatiner %llu with pid as %u ", container->cid, procId);
      struct task_list *tTmp;
      tTmp = (struct task_list *)kmalloc(sizeof(struct task_list), GFP_KERNEL);
      mutex_lock(&lock);
@@ -336,7 +342,7 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     }
    else
    {
-       printk("Creating and allocating the processor with id: %uld to list\n",processIdOfTask);
+       printk("Creating and allocating the processor with id: %u to list\n",processIdOfTask);
        associateProcToContainer(intermediateContainer,processIdOfTask);
    }
     return 0;
@@ -355,7 +361,7 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
     tempCont = searchContainerByProcId(current->pid);
     if(tempCont == NULL)
     {
-        printk("No container found for this process id:%uld \n", current->pid);
+        printk("No container found for this process id:%u \n", current->pid);
 	return 0;
     }
     list_for_each_safe(fp,fq,&((tempCont->head).list))
