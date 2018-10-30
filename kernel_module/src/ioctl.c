@@ -67,8 +67,8 @@ struct task_list
 struct memObj
 {
   __u64 oid;
-  void *addr;
-  __u64 oSize;
+  __u64 addr;
+  size_t oSize;
   struct list_head list;
 };
 
@@ -84,7 +84,7 @@ struct container_list
 struct memObj *tempMemObj;
 struct task_list *tempProcObj;
 struct list_head *pos;
-struct list_head *p,*q,*p2,*q2,*pp1,*pq1,*pp2,*pq2;
+struct list_head *pt,*qt,*p2,*q2,*pp1,*pq1,*pp2,*pq2;
 struct container_list *tempCont;
 
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
@@ -92,15 +92,19 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
     //printk("Entered memory_container_mmap\n");
     size_t size = vma->vm_end - vma->vm_start;
     int ret =0;
-    list_for_each_safe(p,q,&containerHead.list)
+    mutex_lock(&lock);
+    tempCont = searchContainerByProcId(current->pid);
+    mutex_unlock(&lock);
+    //list_for_each_safe(pt,qt,&containerHead.list)
+    if(tempCont!=NULL)
     {
-	tempCont = list_entry(p, struct container_list,list);
+	//tempCont = list_entry(pt, struct container_list,list);
         list_for_each_safe(p2, q2, &((tempCont->mHead).list))
         {
             tempMemObj = list_entry(p2,struct memObj,list);
 	    if(tempMemObj!=NULL && tempMemObj->oid==vma->vm_pgoff)
 	    {
-                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->oSize,vma->vm_end - vma->vm_start,vma->vm_page_prot);
+                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,tempMemObj->oSize,vma->vm_page_prot);
 		if(ret<0)
 	        {
 		    printk("Memory mapping failed\n");
@@ -123,8 +127,8 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
     	tempMemObj = (struct memObj *)kmalloc(sizeof(struct memObj),GFP_KERNEL);
         tempMemObj->oid = vma->vm_pgoff;
         unsigned long pfn = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
-        tempMemObj->addr = address;
-	tempMemObj->oSize = pfn;
+        tempMemObj->addr = pfn;
+	tempMemObj->oSize = size;
         ret = remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot);
         if(ret<0)
 	{
@@ -161,8 +165,9 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
     struct list_head *p,*q;
     struct memory_container_cmd kcmd;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
-
+    mutex_lock(&lock);
     tempC = searchContainerByProcId(current->pid);
+    mutex_unlock(&lock);
     if(tempC == NULL)
     {
         printk("No container is associated with this process\n");
@@ -175,7 +180,7 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 	    tempT = list_entry(p,struct memObj,list);
 	    if(tempT!=NULL && tempT->oid == kcmd.oid)
             {
- 		printk("Gettin lock\n");
+ 		//printk("Gettin lock\n");
 		mutex_lock(tempC->contLock);
   	    }
 	}
@@ -193,7 +198,9 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
     struct list_head *pu,*qu;
     struct memory_container_cmd kcmd;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
+    mutex_lock(&lock);
     tempCu = searchContainerByProcId(current->pid);
+    mutex_unlock(&lock);
     if(tempCu == NULL)
     {
         printk("No container is associated with this process\n");
@@ -206,7 +213,7 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
             tempTu = list_entry(pu,struct memObj,list);
             if(tempTu!=NULL && tempTu->oid == kcmd.oid)
             {
-		printk("Unlocking \n");
+		//printk("Unlocking \n");
                 mutex_unlock(tempCu->contLock);
             }
         }
@@ -306,9 +313,9 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
      //Adding the container to the list
      mutex_lock(&lock);
      list_add(&(tmp->list),&(containerHead.list));
-     mutex_unlock(&lock);
      struct task_list *intermediateProc;
      intermediateProc = isProcessPresent(tmp, proId);
+     mutex_unlock(&lock);
      if(intermediateProc == NULL)
      {
          associateProcToContainer(tmp,proId);
@@ -350,7 +357,9 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     struct memory_container_cmd kcmd;
     struct container_list *intermediateContainer;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
+    mutex_lock(&lock);
     intermediateContainer = isConatinerPresent(kcmd.cid);
+    mutex_unlock(&lock);
     pid_t processIdOfTask = current->pid;
     if(intermediateContainer==NULL)
     {
