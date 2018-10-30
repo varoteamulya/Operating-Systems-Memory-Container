@@ -46,6 +46,7 @@
 #include <linux/kthread.h>
 
 phys_addr_t virt_to_phys(volatile void * address);
+//int munmap(void *, size_t);
 int remap_pfn_range(struct vm_area_struct *vma,unsigned long addr,unsigned long pfn,unsigned long size,pgprot_t prot);
 struct container_list *isConatinerPresent(__u64 id);
 void CreateContainerWithCid(__u64 kcid,pid_t proId);
@@ -66,7 +67,7 @@ struct task_list
 struct memObj
 {
   __u64 oid;
-  __u64 addr;
+  void *addr;
   __u64 oSize;
   struct list_head list;
 };
@@ -89,7 +90,7 @@ struct container_list *tempCont;
 int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     //printk("Entered memory_container_mmap\n");
-    __u64 size = (__u64)vma->vm_end - vma->vm_start;
+    size_t size = vma->vm_end - vma->vm_start;
     int ret =0;
     list_for_each_safe(p,q,&containerHead.list)
     {
@@ -99,7 +100,7 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
             tempMemObj = list_entry(p2,struct memObj,list);
 	    if(tempMemObj!=NULL && tempMemObj->oid==vma->vm_pgoff)
 	    {
-                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,vma->vm_end - vma->vm_start,vma->vm_page_prot);
+                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->oSize,vma->vm_end - vma->vm_start,vma->vm_page_prot);
 		if(ret<0)
 	        {
 		    printk("Memory mapping failed\n");
@@ -110,7 +111,7 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
         }
 
     }
-    address = kmalloc((size), GFP_KERNEL);
+    address = kcalloc(1,(size), GFP_KERNEL);
 
     if (address == NULL)
     {
@@ -122,8 +123,8 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
     	tempMemObj = (struct memObj *)kmalloc(sizeof(struct memObj),GFP_KERNEL);
         tempMemObj->oid = vma->vm_pgoff;
         unsigned long pfn = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
-        tempMemObj->addr = pfn;
-	tempMemObj->oSize = size;
+        tempMemObj->addr = address;
+	tempMemObj->oSize = pfn;
         ret = remap_pfn_range(vma, vma->vm_start, pfn,vma->vm_end - vma->vm_start,vma->vm_page_prot);
         if(ret<0)
 	{
@@ -169,11 +170,12 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
     }
     else
     {
-        list_for_each_safe(p,q,&((tempC->head).list))
+        list_for_each_safe(p,q,&((tempC->mHead).list))
 	{
 	    tempT = list_entry(p,struct memObj,list);
 	    if(tempT!=NULL && tempT->oid == kcmd.oid)
             {
+ 		printk("Gettin lock\n");
 		mutex_lock(tempC->contLock);
   	    }
 	}
@@ -199,11 +201,12 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
     }
     else
     {
-        list_for_each_safe(pu,qu,&((tempCu->head).list))
+        list_for_each_safe(pu,qu,&((tempCu->mHead).list))
         {
             tempTu = list_entry(pu,struct memObj,list);
             if(tempTu!=NULL && tempTu->oid == kcmd.oid)
             {
+		printk("Unlocking \n");
                 mutex_unlock(tempCu->contLock);
             }
         }
@@ -369,12 +372,14 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
         printk("No container found for this process id:%u \n", current->pid);
 	return 0;
     }
-    list_for_each_safe(fp,fq,&((tempCont->head).list))
+    list_for_each_safe(fp,fq,&((tempCont->mHead).list))
     {
         freeMemObj = list_entry(fp,struct memObj,list);
         if(freeMemObj!=NULL && freeMemObj->oid == kcmd.oid)
         {
-            freeMemObj->addr = NULL;
+ 	    printk("Freeing memory here\n");
+//            munmap(&freeMemObj->addr,freeMemObj->oSize);
+	    kfree(&freeMemObj->addr);
             list_del(&freeMemObj->list);
 	    kfree(freeMemObj);
   	}

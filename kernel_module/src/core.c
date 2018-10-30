@@ -56,7 +56,7 @@ struct task_list
 struct memObj
 {
   __u64 oid;
-  __u64 addr;
+  void *addr;
   __u64 oSize;
   struct list_head list;
 };
@@ -67,7 +67,7 @@ struct container_list
    struct task_list head;
    struct memObj mHead;
    struct list_head list;
-   struct list_head objList;
+   struct mutex *contLock;
 };
 
 
