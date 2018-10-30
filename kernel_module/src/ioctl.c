@@ -220,6 +220,8 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
     printk("Delete the process from the container list\n");
     struct container_list *deleteProcInCont = NULL;
     struct task_list *deAssociateProc = NULL;
+    struct task_list *tempTask;
+    struct memObj *tMemObj;
     struct list_head *dp,*dq;
     mutex_lock(&lock);
     deleteProcInCont = searchContainerByProcId(current->pid);
@@ -239,6 +241,13 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 		kfree(deAssociateProc);
   	    }
 	}
+    }
+    tempTask =&(deleteProcInCont->head);
+    tMemObj = &(deleteProcInCont->mHead);
+    if(list_empty_careful(&tempTask->list) && list_empty_careful(&tMemObj->list))
+    {
+        list_del(&deleteProcInCont->list);
+	kfree(deleteProcInCont);
     }
     mutex_unlock(&lock);
     return 0;
@@ -379,7 +388,7 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
         {
  	    printk("Freeing memory here\n");
 //            munmap(&freeMemObj->addr,freeMemObj->oSize);
-	    kfree(&freeMemObj->addr);
+//	    kfree(&freeMemObj->addr);
             list_del(&freeMemObj->list);
 	    kfree(freeMemObj);
   	}
