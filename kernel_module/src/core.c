@@ -56,9 +56,10 @@ struct task_list
 struct memObj
 {
   __u64 oid;
-  void *addr;
-  __u64 oSize;
+  __u64 addr;
+  size_t oSize;
   struct list_head list;
+  void *data;
 };
 
 struct container_list
@@ -90,5 +91,37 @@ int memory_container_init(void)
 
 void memory_container_exit(void)
 {
+    struct list_head *p,*q,*pp1,*pq1,*pp2,*pq2;
+    struct task_list *tempProcObj;
+    struct memObj *memOb;
+    struct memObj *tempTu;
+    struct container_list *tempCnt,*tempCont;
+
+    list_for_each_safe(p,q,&containerHead.list)
+    {
+            tempCont = list_entry(p, struct container_list,list);
+            list_for_each_safe(pp2, pq2, &((tempCont->head).list))
+            {
+                tempProcObj = list_entry(pp2,struct task_list,list);
+                if(tempProcObj!=NULL && tempProcObj->processId == current->pid)
+                {
+		    tempCnt = tempCont;
+                }
+            }
+     }
+    tempProcObj = &(tempCnt->head);
+    memOb = &(tempCnt->mHead);
+    if(list_empty_careful(&tempProcObj->list) && !list_empty_careful(&memOb->list))
+    {
+     list_for_each_safe(pp1,pq1,&((tempCnt->mHead).list))
+        {
+            tempTu = list_entry(pp1,struct memObj,list);
+            if(tempTu!=NULL)
+            {
+                list_del(&tempTu->list);
+		kfree(tempTu);
+            }
+        }
+    }
     misc_deregister(&memory_container_dev);
 }
