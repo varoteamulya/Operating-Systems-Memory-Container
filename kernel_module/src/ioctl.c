@@ -112,7 +112,8 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 			unsigned long pfn2 = virt_to_phys((void *)(long unsigned int)address)>>PAGE_SHIFT;
 			tempMemObj->addr=pfn2;
 		}
-                ret = remap_pfn_range(vma, vma->vm_start, virt_to_phys((void *)(long unsigned int)tempMemObj->data)>>PAGE_SHIFT,tempMemObj->oSize,vma->vm_page_prot);
+//		printk("Check here\n");
+                ret = remap_pfn_range(vma, vma->vm_start, tempMemObj->addr,size,vma->vm_page_prot);
 		if(ret<0)
 	        {
 		    printk("Memory mapping failed\n");
@@ -180,7 +181,7 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
     if(tempC == NULL)
     {
         printk("No container is associated with this process\n");
-  //      return 0;
+        return 0;
     }
 //    else
   //  {
@@ -189,7 +190,7 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
 //	    tempT = list_entry(p,struct memObj,list);
 //	    if(tempT!=NULL && tempT->oid == kcmd.oid)
   //          {
- 		printk("Gettin lock\n");
+// 		printk("Gettin lock\n");
 		mutex_lock(&tempC->contLock);
   //	    }
 //	}
@@ -213,7 +214,7 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
     if(tempCu == NULL)
     {
         printk("No container is associated with this process\n");
-    //    return 0;
+        return 0;
     }
    // else
     //{
@@ -222,7 +223,7 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
       //      tempTu = list_entry(pu,struct memObj,list);
         //    if(tempTu!=NULL && tempTu->oid == kcmd.oid)
           //  {
-		printk("Unlocking \n");
+//		printk("Unlocking \n");
                 mutex_unlock(&tempCu->contLock);
             //}
         //}
@@ -233,7 +234,7 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
 
 int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 {
-    printk("Delete the process from the container list\n");
+    //printk("Delete the process from the container list\n");
     struct container_list *deleteProcInCont = NULL;
     struct task_list *deAssociateProc = NULL;
     struct task_list *tempTask;
@@ -254,7 +255,7 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 	list_for_each_safe(dp,dq,&((deleteProcInCont->head).list))
 	{
 	    deAssociateProc = list_entry(dp,struct task_list,list);
-	    if(deAssociateProc!=NULL)// && deAssociateProc->processId == current->pid) 
+	    if(deAssociateProc!=NULL && deAssociateProc->processId == current->pid) 
             {
   		mutex_lock(&lock);
 		list_del(&deAssociateProc->list);
@@ -304,7 +305,7 @@ struct container_list *searchContainerByProcId(pid_t procsId)
 
 struct container_list *isConatinerPresent(__u64 id)
 {
-   printk("Check iscontainerpresent\n ");
+//   printk("Check iscontainerpresent\n ");
    struct container_list *temp;
    struct list_head *pos,*p;
    //Traversing the list
@@ -322,7 +323,7 @@ struct container_list *isConatinerPresent(__u64 id)
 
 void CreateContainerWithCid(__u64 kcid,pid_t proId)
 {
-     printk("creating the container ");
+  //   printk("creating the container ");
      struct container_list *tmp;
      //Creating a new container
      tmp = (struct container_list *)kmalloc(sizeof(struct container_list), GFP_KERNEL);
@@ -345,7 +346,7 @@ void CreateContainerWithCid(__u64 kcid,pid_t proId)
 
 struct task_list *isProcessPresent(struct container_list *container, pid_t procId)
 {
-   printk("Checking is ProcessPresent\n");
+  // printk("Checking is ProcessPresent\n");
    struct task_list *tThreadTemp;
    struct list_head *p,*q;
    list_for_each_safe(p, q,&((container->head).list))
@@ -362,7 +363,7 @@ struct task_list *isProcessPresent(struct container_list *container, pid_t procI
 
 int associateProcToContainer(struct container_list *container, pid_t procId)
 {
-     printk("associate process to conatiner %llu with pid as %u ", container->cid, procId);
+    // printk("associate process to conatiner %llu with pid as %u ", container->cid, procId);
      struct task_list *tTmp;
      tTmp = (struct task_list *)kmalloc(sizeof(struct task_list), GFP_KERNEL);
      mutex_lock(&lock);
@@ -374,7 +375,7 @@ int associateProcToContainer(struct container_list *container, pid_t procId)
 
 int memory_container_create(struct memory_container_cmd __user *user_cmd)
 {
-    printk("Entered create container\n");
+//    printk("Entered create container\n");
     struct memory_container_cmd kcmd;
     struct container_list *intermediateContainer;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
@@ -384,12 +385,12 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     pid_t processIdOfTask = current->pid;
     if(intermediateContainer==NULL)
     {
-        printk("Container doesn't exist, creating one now with cid: %llu \n",kcmd.cid);
+    //    printk("Container doesn't exist, creating one now with cid: %llu \n",kcmd.cid);
     	CreateContainerWithCid(kcmd.cid,processIdOfTask);
     }
    else
    {
-       printk("Creating and allocating the processor with id: %u to list\n",processIdOfTask);
+      // printk("Creating and allocating the processor with id: %u to list\n",processIdOfTask);
        associateProcToContainer(intermediateContainer,processIdOfTask);
    }
     return 0;
@@ -398,7 +399,7 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
 
 int memory_container_free(struct memory_container_cmd __user *user_cmd)
 {
-    printk("Memory Container Free\n");
+  //  printk("Memory Container Free\n");
     struct memory_container_cmd kcmd;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
     struct container_list *tempCont = NULL;
@@ -419,7 +420,7 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
         freeMemObj = list_entry(fp,struct memObj,list);
         if(freeMemObj!=NULL && freeMemObj->oid == kcmd.oid)
         {
- 	    printk("Freeing memory here\n");
+ 	//    printk("Freeing memory here\n");
 //            munmap(&freeMemObj->addr,freeMemObj->oSize);
 //	    kfree(&freeMemObj->addr);
 	    mutex_lock(&lock);
