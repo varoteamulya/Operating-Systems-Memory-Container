@@ -111,7 +111,7 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 		    printk("Memory mapping failed\n");
         	    return -EIO;
         	}
-	        return 0;
+	        return ret;
 	    }
         }
 
@@ -155,7 +155,7 @@ int memory_container_mmap(struct file *filp, struct vm_area_struct *vma)
 //    printk("address=%d\t",address);
 //    printk("size=%llu\t", size);
 //    printk("pid:%d\t pid_name:%s\n", current->pid, current->comm);
-    return 0;
+    return ret;
 }
 
 
@@ -177,15 +177,15 @@ int memory_container_lock(struct memory_container_cmd __user *user_cmd)
     }
     else
     {
-        list_for_each_safe(p,q,&((tempC->mHead).list))
-	{
-	    tempT = list_entry(p,struct memObj,list);
-	    if(tempT!=NULL && tempT->oid == kcmd.oid)
-            {
+//        list_for_each_safe(p,q,&((tempC->mHead).list))
+//	{
+//	    tempT = list_entry(p,struct memObj,list);
+//	    if(tempT!=NULL && tempT->oid == kcmd.oid)
+  //          {
  		//printk("Gettin lock\n");
 		mutex_lock(tempC->contLock);
-  	    }
-	}
+  //	    }
+//	}
     }
 
     return 0;
@@ -210,15 +210,15 @@ int memory_container_unlock(struct memory_container_cmd __user *user_cmd)
     }
     else
     {
-        list_for_each_safe(pu,qu,&((tempCu->mHead).list))
-        {
-            tempTu = list_entry(pu,struct memObj,list);
-            if(tempTu!=NULL && tempTu->oid == kcmd.oid)
-            {
+  //      list_for_each_safe(pu,qu,&((tempCu->mHead).list))
+    //    {
+      //      tempTu = list_entry(pu,struct memObj,list);
+        //    if(tempTu!=NULL && tempTu->oid == kcmd.oid)
+          //  {
 		//printk("Unlocking \n");
                 mutex_unlock(tempCu->contLock);
-            }
-        }
+            //}
+        //}
     }
     return 0;
 }
@@ -235,10 +235,11 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
     //mutex_lock(&lock);
     deleteProcInCont = searchContainerByProcId(current->pid);
    //mutex_unlock(&lock);
-
+    //mutex_lock(&lock);
     if(deleteProcInCont == NULL)
     {
 	printk("Container with proc id: %u not present\n", current->pid);
+//mutex_unlock(&lock);
 	return 0;
     }
     else
@@ -248,7 +249,9 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
 	    deAssociateProc = list_entry(dp,struct task_list,list);
 	    if(deAssociateProc!=NULL && deAssociateProc->processId == current->pid) 
             {
+  		mutex_lock(&lock);
 		list_del(&deAssociateProc->list);
+		mutex_unlock(&lock);
 		kfree(deAssociateProc);
   	    }
 	}
@@ -257,10 +260,12 @@ int memory_container_delete(struct memory_container_cmd __user *user_cmd)
     tMemObj = &(deleteProcInCont->mHead);
     if(list_empty_careful(&tempTask->list) && list_empty_careful(&tMemObj->list))
     {
+	mutex_lock(&lock);
         list_del(&deleteProcInCont->list);
+	mutex_unlock(&lock);
 	kfree(deleteProcInCont);
     }
-    //mutex_unlock(&lock);
+  //  mutex_unlock(&lock);
     return 0;
 }
 
@@ -270,7 +275,7 @@ struct container_list *searchContainerByProcId(pid_t procsId)
     struct list_head *sp,*sq, *sp1,*sq1;
     struct task_list *tempProc;
     struct container_list *tCont;
-mutex_lock(&lock);
+//mutex_lock(&lock);
     list_for_each_safe(sp,sq,&containerHead.list)
     {
         tCont = list_entry(sp, struct container_list,list);
@@ -279,12 +284,12 @@ mutex_lock(&lock);
             tempProc = list_entry(sp1,struct task_list,list);
 	    if(tempProc!=NULL && tempProc->processId == procsId)
 	    {
-		mutex_unlock(&lock);
+		//mutex_unlock(&lock);
                 return tCont;
 	    }
         }
     }
-mutex_unlock(&lock);
+//mutex_unlock(&lock);
     return NULL;
 }
 
@@ -364,9 +369,9 @@ int memory_container_create(struct memory_container_cmd __user *user_cmd)
     struct memory_container_cmd kcmd;
     struct container_list *intermediateContainer;
     copy_from_user(&kcmd, (void __user*)user_cmd, sizeof(struct memory_container_cmd));
-    mutex_lock(&lock);
+    //mutex_lock(&lock);
     intermediateContainer = isConatinerPresent(kcmd.cid);
-    mutex_unlock(&lock);
+    //mutex_unlock(&lock);
     pid_t processIdOfTask = current->pid;
     if(intermediateContainer==NULL)
     {
@@ -393,10 +398,11 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
 //    mutex_lock(&lock);
     tempCont = searchContainerByProcId(current->pid);
   //  mutex_unlock(&lock);
-
+//    mutex_lock(&lock);
     if(tempCont == NULL)
     {
         printk("No container found for this process id:%u \n", current->pid);
+//mutex_unlock(&lock);
 	return 0;
     }
     list_for_each_safe(fp,fq,&((tempCont->mHead).list))
@@ -407,11 +413,13 @@ int memory_container_free(struct memory_container_cmd __user *user_cmd)
  	    printk("Freeing memory here\n");
 //            munmap(&freeMemObj->addr,freeMemObj->oSize);
 //	    kfree(&freeMemObj->addr);
+	    mutex_lock(&lock);
             list_del(&freeMemObj->list);
+	    mutex_unlock(&lock);
 	    kfree(freeMemObj);
   	}
     }
-    //mutex_unlock(&lock);
+//    mutex_unlock(&lock);
     return 0;
 }
 
